@@ -145,3 +145,42 @@ export function buildStreamErrorBytes(statusCode, message, clientFormat) {
 
   return sharedEncoder.encode(sse);
 }
+
+const CLAUDE_PING = sharedEncoder.encode('event: ping\ndata: {"type": "ping"}\n\n');
+const CLAUDE_PING_IDLE_MS = 5000;
+
+// Claude Code aborts and retries a stream after a stretch with no bytes. The Anthropic
+// API sends `event: ping` for that; upstreams that reason silently send nothing, and the
+// translator only emits message_start with the first delta. Ping once up front (the server
+// only flushes headers with the first body byte) and again after each idle stretch.
+// Chunks are whole SSE events, so a ping never lands mid-event.
+export function withClaudePing(stream) {
+  const reader = stream.getReader();
+  let timer = null;
+  let lastAt = Date.now();
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(CLAUDE_PING);
+      timer = setInterval(() => {
+        if (Date.now() - lastAt < CLAUDE_PING_IDLE_MS) return;
+        lastAt = Date.now();
+        try { controller.enqueue(CLAUDE_PING); } catch { clearInterval(timer); }
+      }, CLAUDE_PING_IDLE_MS);
+    },
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) { clearInterval(timer); controller.close(); return; }
+        lastAt = Date.now();
+        controller.enqueue(value);
+      } catch (e) {
+        clearInterval(timer);
+        try { controller.error(e); } catch { /* noop */ }
+      }
+    },
+    cancel(reason) {
+      clearInterval(timer);
+      return reader.cancel(reason);
+    },
+  });
+}
