@@ -24,6 +24,9 @@ const CODEX_SSE_USER_OUTPUT_PATTERNS = [
   '"type":"response.function_call_arguments.delta"',
 ];
 const CODEX_SSE_PEEK_BYTES = 256 * 1024;
+// Cap on how long the peek may hold the response. While the model reasons silently no
+// delta arrives, and without a cap the client gets no headers until the first token.
+const CODEX_SSE_PEEK_MS = 5000;
 const CODEX_MODEL_CAPACITY_MESSAGE = "Selected model is at capacity. Please try a different model.";
 function isCodexResponsesLiteModel(model) {
   const baseId = String(model || "").replace(/\([^()]+\)\s*$/, "");
@@ -335,9 +338,18 @@ export class CodexExecutor extends BaseExecutor {
     let text = "";
     let matched = null;
     let accountFallback = false;
+    // A read still pending when the deadline fires is handed to the replacement stream.
+    let pending = null;
+    let timer;
+    const timedOut = Symbol("peek timeout");
+    const deadline = new Promise(r => { timer = setTimeout(r, CODEX_SSE_PEEK_MS, timedOut); });
     try {
       while (text.length < CODEX_SSE_PEEK_BYTES) {
-        const { done, value } = await reader.read();
+        pending ??= reader.read();
+        const r = await Promise.race([pending, deadline]);
+        if (r === timedOut) break;
+        pending = null;
+        const { done, value } = r;
         if (done) break;
         chunks.push(value);
         text += decoder.decode(value, { stream: true });
@@ -349,7 +361,10 @@ export class CodexExecutor extends BaseExecutor {
         if (CODEX_SSE_USER_OUTPUT_PATTERNS.some(p => lowerText.includes(p))) break;
       }
     } catch (e) {
+      pending = null;
       dbg("CODEX", `peek read error: ${e.message}`);
+    } finally {
+      clearTimeout(timer);
     }
 
     if (matched) {
@@ -358,25 +373,22 @@ export class CodexExecutor extends BaseExecutor {
       return { matched, message: extractSseErrorMessage(text, matched), accountFallback, replacementBody: null };
     }
 
-    reader.releaseLock();
-
     // Re-assemble stream: prefix chunks + remaining upstream body
-    const upstream = response.body;
-    let upstreamReader = null;
     const replacementBody = new ReadableStream({
       start(controller) {
         for (const c of chunks) controller.enqueue(c);
-        upstreamReader = upstream.getReader();
       },
       async pull(controller) {
         try {
-          const { done, value } = await upstreamReader.read();
+          const next = pending ?? reader.read();
+          pending = null;
+          const { done, value } = await next;
           if (done) { controller.close(); return; }
           controller.enqueue(value);
         } catch (e) { controller.error(e); }
       },
       cancel(reason) {
-        try { upstreamReader?.cancel(reason); } catch { /* noop */ }
+        try { reader.cancel(reason); } catch { /* noop */ }
       },
     });
     return { matched: null, message: null, accountFallback: false, replacementBody };
