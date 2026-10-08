@@ -1,0 +1,30 @@
+services:
+  9router:
+    build:
+      context: ..
+      args:
+        # node:sqlite estável (o /v1/systemone do custom-server.js lê o db por ele).
+        NODE_IMAGE: node:24-alpine
+    image: 9router:local
+    container_name: 9router
+    restart: unless-stopped
+
+    # host, não bridge: o middleware do 9router só dispensa API key quando o IP do
+    # socket está em {localhost, 127.0.0.1, ::1}. Com bridge, todo cliente local
+    # chega como 172.17.0.1 e passa a exigir key.
+    network_mode: host
+
+    volumes:
+      - ${NINEROUTER_DATA:-/opt/9router-data}:/app/data
+    environment:
+      TZ: America/Sao_Paulo
+      DATA_DIR: /app/data
+      HOSTNAME: 0.0.0.0
+      PORT: "20128"
+    command: ["node", "--dns-result-order=ipv4first", "--max-old-space-size=6144", "custom-server.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:'+process.env.PORT+'/api/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
