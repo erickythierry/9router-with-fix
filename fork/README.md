@@ -46,8 +46,8 @@ docker save 9router:local | ssh root@192.168.1.2 'docker load'
 ssh root@192.168.1.2 'cd /opt/9router-docker && docker compose up -d --force-recreate'
 ```
 
-O compose de produção no mini PC precisa espelhar `fork/docker-compose.yml`: o volume monta
-em `/app/data` (antes era `/data`).
+O `/opt/9router-docker/docker-compose.yml` do mini PC é cópia de `fork/docker-compose.yml`
+(o `build:` lá não roda, a imagem já existe). Mudou o compose, `scp` de novo.
 
 Rollback: `docker tag 9router:rollback-<versao> 9router:local && docker compose up -d --force-recreate`
 no mini PC. Backups do db em `/opt/9router-data/db/backups/`.
@@ -59,7 +59,7 @@ no mini PC. Backups do db em `/opt/9router-data/db/backups/`.
 - **`network_mode: host`**: o middleware só dispensa API key para socket em
   `{localhost, 127.0.0.1, ::1}`. Com bridge, todo cliente local vira `172.17.0.1`.
 - **`custom-server.js` direto, sem `cli.js`**: o CMD do upstream já faz isso. O compose só
-  acrescenta `--dns-result-order=ipv4first` e `--max-old-space-size=6144`.
+  acrescenta `--dns-result-order=ipv4first` e heap de 1536 MB (`mem_limit: 2g`): o mini PC tem 3 GB.
 
 ## Fixes
 
