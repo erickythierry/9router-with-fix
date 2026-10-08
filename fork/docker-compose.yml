@@ -21,7 +21,13 @@ services:
       DATA_DIR: /app/data
       HOSTNAME: 0.0.0.0
       PORT: "20128"
-    command: ["node", "--dns-result-order=ipv4first", "--max-old-space-size=6144", "custom-server.js"]
+    # ponytail: heap 1536 — mini PC tem 3 GB de RAM e ainda roda CapRover. Subir se
+    # aparecer "JS heap out of memory" no log.
+    command: ["node", "--dns-result-order=ipv4first", "--max-old-space-size=1536", "custom-server.js"]
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:'+process.env.PORT+'/api/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
