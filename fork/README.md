@@ -58,7 +58,7 @@ no servidor remoto. Backups do db em `<data-dir>/db/backups/`.
 - **`network_mode: host`**: o middleware só dispensa API key para socket em
   `{localhost, 127.0.0.1, ::1}`. Com bridge, todo cliente local vira `172.17.0.1`.
 - **`custom-server.js` direto, sem `cli.js`**: o CMD do upstream já faz isso. O compose só
-  acrescenta `--dns-result-order=ipv4first` e `--max-old-space-size=6144`.
+  acrescenta `--dns-result-order=ipv4first` e heap adaptado ao ambiente (`mem_limit: 2g`).
 
 ## Fixes
 
