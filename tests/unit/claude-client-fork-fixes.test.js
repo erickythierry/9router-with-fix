@@ -3,13 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/usageDb.js", () => ({
   appendRequestLog: vi.fn(async () => {}),
   saveRequestDetail: vi.fn(async () => {}),
-  saveRequestUsage: vi.fn(async () => {})
+  saveRequestUsage: vi.fn(async () => {}),
+  trackPendingRequest: vi.fn()
 }));
 
 const { FORMATS } = await import("../../open-sse/translator/formats.js");
 const { handleNonStreamingResponse } = await import("../../open-sse/handlers/chatCore/nonStreamingHandler.js");
 const { handleForcedSSEToJson } = await import("../../open-sse/handlers/chatCore/sseToJsonHandler.js");
 const { withClaudePing } = await import("../../open-sse/utils/streamHelpers.js");
+const { createSSEStream } = await import("../../open-sse/utils/stream.js");
 const { CodexExecutor } = await import("../../open-sse/executors/codex.js");
 
 const encoder = new TextEncoder();
@@ -91,5 +93,22 @@ describe("Codex peek cap", () => {
     ctrl.close();
     await expect(new Response(peek.replacementBody).text())
       .resolves.toBe("event: response.created\n\nevent: response.output_text.delta\n\n");
+  });
+});
+
+describe("Claude client, message_start usage", () => {
+  it("carries an estimated input_tokens when the upstream reports usage only at the end", async () => {
+    const evs = [
+      { type: "response.created", response: { id: "resp_1", model: "m" } },
+      { type: "response.output_item.added", output_index: 0, item: { type: "message", id: "m1", role: "assistant", content: [] } },
+      { type: "response.output_text.delta", output_index: 0, item_id: "m1", content_index: 0, delta: "oi" },
+      { type: "response.completed", response: { id: "resp_1", usage: { input_tokens: 50, output_tokens: 2 } } }
+    ];
+    const sse = evs.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join("");
+    const src = new ReadableStream({ start(c) { c.enqueue(encoder.encode(sse)); c.close(); } });
+    const t = createSSEStream({ mode: "translate", targetFormat: FORMATS.OPENAI_RESPONSES, sourceFormat: FORMATS.CLAUDE, provider: "codex", model: "m", body: { messages: [{ role: "user", content: "x".repeat(400) }] } });
+    const out = await new Response(src.pipeThrough(t)).text();
+    const start = JSON.parse(out.match(/data: (\{"type":"message_start".*)/)[1]);
+    expect(start.message.usage.input_tokens).toBeGreaterThan(90);
   });
 });
