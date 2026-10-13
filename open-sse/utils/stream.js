@@ -3,7 +3,7 @@ import { FORMATS } from "../translator/formats.js";
 import { PROVIDERS } from "../config/providers.js";
 import { liftReasoningAliases } from "../translator/concerns/reasoning.js";
 import { trackPendingRequest, appendRequestLog } from "@/lib/usageDb.js";
-import { extractUsage, mergeUsage, hasValidUsage, estimateUsage, logUsage, addBufferToUsage, filterUsageForFormat, COLORS } from "./usageTracking.js";
+import { extractUsage, mergeUsage, hasValidUsage, estimateUsage, estimateInputTokens, logUsage, addBufferToUsage, filterUsageForFormat, COLORS } from "./usageTracking.js";
 import { parseSSELine, hasValuableContent, fixInvalidId, formatSSE, ensureStreamToolCallIds } from "./streamHelpers.js";
 import { restoreToolNames } from "./opencodeFingerprint.js";
 import { getOpenAIResponsesEventName, isOpenAIResponsesTerminalEvent, formatIncompleteOpenAIResponsesStreamFailure } from "./responsesStreamHelpers.js";
@@ -433,6 +433,13 @@ export function createSSEStream(options = {}) {
             // Filter empty chunks
             if (!hasValuableContent(item, sourceFormat)) {
               continue; // Skip this empty chunk
+            }
+
+            // Claude Code feeds its subagent token counter from the usage the message
+            // carries when it closes, which is the message_start one; the real usage
+            // only arrives later in message_delta. Zero here shows as a few tokens.
+            if (item.type === "message_start" && sourceFormat === FORMATS.CLAUDE && !(item.message?.usage?.input_tokens > 0)) {
+              item.message.usage = { ...item.message.usage, input_tokens: estimateInputTokens(body) };
             }
 
             // Inject estimated usage if finish chunk has no valid usage
