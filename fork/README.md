@@ -115,6 +115,19 @@ curl -s http://localhost:20128/v1/systemone -H "Authorization: Bearer $API_KEY" 
                     "criteria":{"true":"sim","false":"nao"}}}}'
 ```
 
+### 4. Estimativa de `input_tokens` no `message_start` para clientes Claude
+
+- Arquivos: `open-sse/utils/stream.js`, `tests/unit/claude-client-fork-fixes.test.js`
+- Sintoma: com `cx/gpt-6.1-sol` no Claude Code, o contador do subagente mostrava `↓ 222 tokens`
+  (2–3 dígitos), sempre o mesmo valor, aparentemente travado.
+- Causa: o tradutor manda `message_start` com `usage: {input_tokens: 0, output_tokens: 0}` e o
+  usage real só chega no `message_delta`. O Claude Code monta o contador do subagente a partir
+  do usage do `message_start`; o `task_progress` ficava em `total_tokens: 46` durante toda a
+  execução.
+- Fix: quando o cliente fala Claude e o `message_start` sai sem `input_tokens`, injeta
+  `estimateInputTokens(body)` (≈ chars/4 do body). O usage real continua chegando no
+  `message_delta`. É estimativa, não contagem exata do upstream.
+
 ## Fixes do repo antigo que não vieram
 
 - `prefixItems` no schema de tool Gemini: upstream corrigiu em `f6c59d30` (v0.5.91).
