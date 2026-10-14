@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { canonicalizeUsage, extractUsage, mergeUsage } from "../../open-sse/utils/usageTracking.js";
-import { calculateCostFromTokens } from "../../open-sse/providers/pricing.js";
+import { calculateCostFromTokens, getPricingForModel } from "../../open-sse/providers/pricing.js";
 import { buildUsage, toOpenAIUsage } from "../../open-sse/translator/concerns/usage.js";
 
 // Canonical convention (single source of truth for storage + cost):
@@ -196,5 +196,22 @@ describe("Kiro usage pass-through", () => {
     expect(out.prompt_tokens_details).toBeDefined();
     expect(out.prompt_tokens_details.cached_tokens).toBe(200);
     expect(out.prompt_tokens_details.cache_creation_tokens).toBe(50);
+  });
+});
+
+describe("Claude 5.5 pricing", () => {
+  it("sonnet-5-5 cache read is $0.10/M", () => {
+    const cost = calculateCostFromTokens({ prompt_tokens: 1_000_000, cached_tokens: 1_000_000 }, getPricingForModel("claude", "claude-sonnet-5-5"));
+    expect(cost).toBeCloseTo(0.10, 6);
+  });
+
+  it("haiku-5-5 uses base rates up to 100k prompt tokens", () => {
+    const cost = calculateCostFromTokens({ prompt_tokens: 100_000, cached_tokens: 50_000, completion_tokens: 1_000_000 }, getPricingForModel("claude", "claude-haiku-5-5"));
+    expect(cost).toBeCloseTo(50_000 * 0.10 / 1e6 + 50_000 * 0.01 / 1e6 + 0.50, 6);
+  });
+
+  it("haiku-5-5 switches to long-prompt rates over 100k, cache included", () => {
+    const cost = calculateCostFromTokens({ prompt_tokens: 200_000, cached_tokens: 150_000, cache_creation_input_tokens: 10_000, completion_tokens: 1_000_000 }, getPricingForModel("claude", "claude-haiku-5-5"));
+    expect(cost).toBeCloseTo(40_000 * 0.50 / 1e6 + 150_000 * 0.05 / 1e6 + 10_000 * 0.625 / 1e6 + 2.50, 6);
   });
 });
