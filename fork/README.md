@@ -71,8 +71,9 @@ no mini PC. Backups do db em `/opt/9router-data/db/backups/`.
   - Upstream Gemini/Antigravity: o tradutor faz só gemini→openai.
   - Provider com `forceStream` (`oc/*`, `cmc/*`, `cx/*`…) e cliente pedindo JSON: o
     conversor SSE→JSON só sabe montar `chat.completion`, `response` e Gemini.
-- Fix: `openAICompletionToClaudeMessage` (já existia no upstream) foi movido para
-  `sseToJsonHandler.js` e aplicado nos dois caminhos quando `sourceFormat === CLAUDE`.
+- Fix: `openAICompletionToClaudeMessage` aplicado quando `sourceFormat === CLAUDE`.
+  Desde a 0.5.104 o upstream cobre sozinho o caminho `forceStream` e o OpenAI (`1d4335d4`);
+  o fork só mantém o caminho Gemini/Antigravity em `nonStreamingHandler.js`.
 
 ### 2. Keepalive SSE para o Claude Code (`cx/*` e modelos que raciocinam calados)
 
