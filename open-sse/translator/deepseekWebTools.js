@@ -771,6 +771,20 @@ function parseNativeDeepSeekCalls(text, idSeed, requestedTools) {
   return { content: stripRanges(text, ranges), toolCalls: calls, recognized };
 }
 
+// DSML parameters arrive as raw strings; decode the ones the schema declares as non-string
+// (arrays, objects, numbers, booleans) so they pass argument validation.
+function coerceDsmlArgsBySchema(args, name, tools) {
+  const tool = Array.isArray(tools) ? tools.find((t) => t?.function?.name === name) : undefined;
+  const properties = tool?.function?.parameters?.properties;
+  if (!properties || typeof properties !== "object") return args;
+  const out = { ...args };
+  for (const [key, value] of Object.entries(out)) {
+    const type = properties[key]?.type;
+    if (typeof value === "string" && type && type !== "string") out[key] = parseJsonOrNull(value) ?? value;
+  }
+  return out;
+}
+
 function normalizeDeepSeekNativeArguments(args, name, tools) {
   // Schema-guided string coercion locally, without changing the generic web-tools behavior.
   const tool = Array.isArray(tools)
@@ -803,6 +817,12 @@ export function parseDeepSeekToolCalls(text, idSeed = "call", requestedTools) {
   // Trailing provider disclaimer would otherwise leak into the last DSML parameter value
   // (the normalizing path strips the same suffix; doing it once up front is equivalent).
   text = text.replace(/\s*This response is AI-generated, for reference only\.\s*$/i, "");
+  // DeepSeek sometimes writes a DSML parameter as `name="_nonce": "value"</...parameter>`, with no
+  // `>` after the open tag. Rewrite it to the well-formed `name="_nonce" string="true">value`.
+  text = text.replace(
+    /(<(?:｜｜|\|\|?)DSML(?:｜｜|\|\|?)\s*parameter\s+name="[^"]+")\s*:\s*"([^"]*)"\s*(?=<\/)/g,
+    '$1 string="true">$2'
+  );
 
   const requested = getRequestedToolNames(requestedTools);
   // Upstream's double-pipe DSML dialect first, on the ORIGINAL text: real replies close blocks
@@ -894,7 +914,10 @@ export function parseDeepSeekToolCalls(text, idSeed = "call", requestedTools) {
       found.push({
         start: d.start,
         end: d.end,
-        call: { name: d.name, arguments: toArgumentsString(d.args) },
+        call: {
+          name: d.name,
+          arguments: toArgumentsString(coerceDsmlArgsBySchema(d.args, d.name, requestedTools)),
+        },
       });
     }
   }
