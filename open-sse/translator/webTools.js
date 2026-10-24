@@ -255,9 +255,26 @@ function normalizeLooseJson(value) {
     .replace(/,\s*([}\]])/g, "$1");
 }
 
+// Models often emit literal newlines/tabs inside JSON strings (multi-line edit/write bodies).
+function escapeRawControlChars(value) {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const ch of value) {
+    if (inString && !escaped && ch === "\n") out += "\\n";
+    else if (inString && !escaped && ch === "\r") out += "\\r";
+    else if (inString && !escaped && ch === "\t") out += "\\t";
+    else out += ch;
+    if (escaped) escaped = false;
+    else if (ch === "\\") escaped = inString;
+    else if (ch === '"') inString = !inString;
+  }
+  return out;
+}
+
 export function parseLooseJsonObject(raw) {
   const trimmed = stripCodeFence(raw);
-  for (const candidate of [trimmed, normalizeLooseJson(trimmed)]) {
+  for (const candidate of [trimmed, normalizeLooseJson(trimmed), escapeRawControlChars(trimmed)]) {
     try {
       return toRecord(JSON.parse(candidate));
     } catch {

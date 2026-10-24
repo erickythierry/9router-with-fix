@@ -1036,6 +1036,7 @@ export class DeepSeekWebExecutor extends BaseExecutor {
           ({ content, reasoningContent } = await collectSSEContent(resp.body, clientModel));
           parsed = parseDeepSeekToolCalls(content, `call-${Date.now()}`, requestedTools);
           if (hasMalformedDeepSeekToolMarkup(parsed.content)) {
+            log?.warn?.("DEEPSEEK-WEB", `Repair still malformed: ${JSON.stringify(content.slice(0, 800))}`);
             return repairFailed("DeepSeek emitted an invalid tool call after repair.");
           }
         }
