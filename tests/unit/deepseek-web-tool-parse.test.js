@@ -65,4 +65,14 @@ describe("deepseek-web tool parsing", () => {
     const p2 = parseDeepSeekToolCalls(t2, "c", tools);
     expect(JSON.parse(p2.toolCalls[0].function.arguments).timeout).toBe(30);
   });
+
+  it("repairs a DSML _nonce parameter written as name=\"_nonce\": \"value\" without '>'", () => {
+    const bad = (cmd) =>
+      `<${D} invoke name="bash">\n<${D} parameter name="command" string="true">${cmd}</${D} parameter>\n` +
+      `<${D} parameter name="_nonce": "${nonce}"</${D} parameter>\n</${D} invoke>`;
+    const text = `<${D} calls>\n${bad("ls -la")}\n${bad("pwd")}\n</${D} calls>`;
+    const p = parseDeepSeekToolCalls(text, "c", tools);
+    expect(p.toolCalls.map((c) => JSON.parse(c.function.arguments).command)).toEqual(["ls -la", "pwd"]);
+    expect(hasMalformedDeepSeekToolIntent(p.content, tools)).toBe(false);
+  });
 });
