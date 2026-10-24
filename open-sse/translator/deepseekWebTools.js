@@ -817,10 +817,10 @@ export function parseDeepSeekToolCalls(text, idSeed = "call", requestedTools) {
   // Trailing provider disclaimer would otherwise leak into the last DSML parameter value
   // (the normalizing path strips the same suffix; doing it once up front is equivalent).
   text = text.replace(/\s*This response is AI-generated, for reference only\.\s*$/i, "");
-  // DeepSeek sometimes writes a DSML parameter as `name="_nonce": "value"</...parameter>`, with no
-  // `>` after the open tag. Rewrite it to the well-formed `name="_nonce" string="true">value`.
+  // DeepSeek sometimes writes a DSML parameter as `name="_nonce": "value"</...parameter>` (sometimes
+  // with a stray `}` after the value), with no `>` after the open tag. Rewrite it to the well-formed `name="_nonce" string="true">value`.
   text = text.replace(
-    /(<(?:｜｜|\|\|?)DSML(?:｜｜|\|\|?)\s*parameter\s+name="[^"]+")\s*:\s*"([^"]*)"\s*(?=<\/)/g,
+    /(<(?:｜｜|\|\|?)DSML(?:｜｜|\|\|?)\s*parameter\s+name="[^"]+")\s*:\s*"([^"]*)"[\s}]*(?=<\/)/g,
     '$1 string="true">$2'
   );
 
