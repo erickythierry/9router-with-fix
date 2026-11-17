@@ -14,14 +14,15 @@ function systemTextSentToAntigravity(systemContent) {
     ],
   }, true);
   const finalBody = new AntigravityExecutor().transformRequest("gemini-3.8-flash-tiered", body, true, {});
-  return finalBody.request.systemInstruction.parts.map((p) => p.text).join("\n");
+  expect(finalBody.request.systemInstruction).toBeUndefined();
+  return finalBody.request.contents[0].parts.map((p) => p.text).join("\n");
 }
 
 describe("Antigravity strips the Claude Code billing header from system prompts", () => {
   it("removes the header line prepended by Claude Code", () => {
     const text = systemTextSentToAntigravity(`${HEADER}\n\nYou are Claude Code, Anthropic's official CLI for Claude.`);
     expect(text).not.toContain("x-anthropic-billing-header");
-    expect(text).toContain("You are Claude Code, Anthropic's official CLI for Claude.");
+    expect(text).toContain("You are Antigravity, Anthropic's official CLI for Claude.");
   });
 
   it("removes the header when it is not the first line", () => {
@@ -34,5 +35,20 @@ describe("Antigravity strips the Claude Code billing header from system prompts"
   it("leaves prompts without the header untouched", () => {
     const text = systemTextSentToAntigravity("You are a helpful assistant.");
     expect(text).toContain("You are a helpful assistant.");
+  });
+});
+
+describe("Antigravity moves the system prompt into the first user turn", () => {
+  it("prepends system text to the first user message and drops systemInstruction", () => {
+    const body = openaiToAntigravityRequest("gemini-3.1-flash-lite", {
+      messages: [
+        { role: "system", content: "SYS_RULES" },
+        { role: "user", content: "hi" },
+      ],
+    }, true);
+    const out = new AntigravityExecutor().transformRequest("gemini-3.1-flash-lite", body, true, {});
+    expect(out.request.systemInstruction).toBeUndefined();
+    expect(out.request.contents[0].role).toBe("user");
+    expect(out.request.contents[0].parts.map((p) => p.text)).toEqual(["SYS_RULES", "hi"]);
   });
 });

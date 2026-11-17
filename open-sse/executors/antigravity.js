@@ -312,6 +312,15 @@ export class AntigravityExecutor extends BaseExecutor {
       }
     }
 
+    // Google returns a fake 429 RESOURCE_EXHAUSTED for some agent-policy text (Claude Code's
+    // security and <pasted_content> paragraphs) in systemInstruction, but accepts the same
+    // text in the first user turn. Move it there.
+    const systemParts = (requestWithoutTools.systemInstruction?.parts || []).filter(p => typeof p.text === "string" && p.text.trim());
+    if (systemParts.length > 0 && contents?.[0]?.role === "user") {
+      contents[0] = { ...contents[0], parts: [...systemParts.map(p => ({ text: p.text })), ...contents[0].parts] };
+      delete requestWithoutTools.systemInstruction;
+    }
+
     const generationConfig = { ...(requestWithoutTools.generationConfig || {}) };
     if (generationConfig.maxOutputTokens > MAX_ANTIGRAVITY_OUTPUT_TOKENS) {
       generationConfig.maxOutputTokens = MAX_ANTIGRAVITY_OUTPUT_TOKENS;
