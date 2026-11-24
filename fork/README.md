@@ -34,6 +34,10 @@ cd tests && npm install --legacy-peer-deps --no-package-lock
 node_modules/.bin/vitest run unit/claude-client-fork-fixes.test.js
 ```
 
+O baseline de `tests/__baseline__/` está defasado e acusa falhas do próprio upstream como
+regressão. Para comparar, rode a suíte com `--reporter=json` na `patches` e num worktree do
+`master` e compare os testes que falham. Na 0.5.123 deu 52 falhas nas duas.
+
 ## Build e deploy
 
 Build no host de desenvolvimento e deploy remoto via Docker:
@@ -129,11 +133,37 @@ curl -s http://localhost:20128/v1/systemone -H "Authorization: Bearer $API_KEY" 
   `estimateInputTokens(body)` (≈ chars/4 do body). O usage real continua chegando no
   `message_delta`. É estimativa, não contagem exata do upstream.
 
+### 5. Preço do Claude 5.5
+
+- Arquivos: `open-sse/providers/pricing.js`, `tests/unit/cached-token-usage.test.js`
+- `claude-haiku-5-5` com preço por faixa (`HAIKU_5_5`), no lugar do preço fixo do upstream.
+- Cache read do `claude-sonnet-5-5*` (inclusive `-max`) a $0.10/M; o upstream usa $0.20/M.
+
+### 6. Parser de tool call do `deepseek-web`
+
+- Arquivos: `open-sse/translator/deepseekWebTools.js`, `webTools.js`, `executors/deepseek-web.js`
+- Sintoma: tool call do DeepSeek web chega quebrada ou some.
+- Fix: escapa caractere de controle cru dentro de string JSON, converte parâmetro DSML pelo tipo
+  do schema da tool e repara tag DSML malformada (inclusive `_nonce` sem `>` no fim).
+
+### 7. Reescritas de prompt no Antigravity contra 429 falso
+
+- Arquivos: `open-sse/config/appConstants.js` (`ANTIGRAVITY_PROMPT_REWRITES`),
+  `tests/unit/antigravity-billing-header-rewrite.test.js`
+- Sintoma: `429 RESOURCE_EXHAUSTED` sem detalhe de quota, com a conta cheia.
+- Causa: o Google recusa certos textos de agente de terceiros no `systemInstruction`.
+- Fix: troca `Claude Code` por `Antigravity`, `interactive agent` por `AI assistant` e reescreve
+  o parágrafo de segurança do Claude Code (`IMPORTANT: Assist with authorized security testing…`).
+- Desde a 0.5.123 o upstream repete a request recusada com o system no primeiro turno de user
+  (`moveSystemInstructionToContents`). O fork tirou a sua versão desse movimento e mantém só as
+  reescritas, que evitam a primeira ida e volta recusada.
+
 ## Fixes do repo antigo que não vieram
 
 - `prefixItems` no schema de tool Gemini: upstream corrigiu em `f6c59d30` (v0.5.91).
 - Peek do `commandcode` (`cmc/*`) cortando resposta: upstream corrigiu em 0.5.91.
 - Session ID / `forceStream` do `opencode` free tier: sintoma sumiu em 0.5.95.
 - System prompt do Cursor (`cu/*`): fora de uso.
+- System prompt do Antigravity no primeiro turno de user: o upstream cobre com retry em 0.5.123.
 
 Os scripts legados foram descontinuados, caso o sintoma volte consulte os commits de histórico.
