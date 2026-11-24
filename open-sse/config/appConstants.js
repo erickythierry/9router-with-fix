@@ -204,6 +204,8 @@ export const ANTIGRAVITY_PROMPT_REWRITES = [
   // Claude Code identity lines also get a fake 429 RESOURCE_EXHAUSTED (verified 2026-11-16 on gemini-3.1-flash-lite).
   { from: /Claude Code/g, to: "Antigravity" },
   { from: /\binteractive agent\b/gi, to: "AI assistant" },
+  // Claude Code's security-policy paragraph (DoS, C2, exploit terms) also gets the fake 429; keep its intent in neutral words.
+  { from: /IMPORTANT: Assist with authorized security testing[^\n]*?defensive use cases\./g, to: "IMPORTANT: Help with security work only when the context shows that it is authorized or defensive. Refuse requests that can cause damage." },
   { from: /opencode/gi, to: (m) => (m === "OpenCode" ? "Antigravity" : m === "OPENCODE" ? "ANTIGRAVITY" : "antigravity") },
   // OpenClaw system-prompt header triggers a fake 429 RESOURCE_EXHAUSTED upstream
   { from: /You are a personal assistant running inside OpenClaw\./gi, to: "You are a personal assistant running inside Antigravity." }
